@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import click
@@ -280,7 +280,7 @@ class BacktestDashboard:
         fig = go.Figure()
         fig.add_trace(
             go.Scatter(
-                x=list(range(len(closed_positions))),
+                x=[datetime.fromtimestamp(ts // 1000, UTC) for ts in closed_positions["sort_timestamp"]],
                 y=closed_positions["cumulative_pnl"],
                 mode="lines+markers",
                 name="Cumulative PnL",

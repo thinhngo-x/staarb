@@ -39,8 +39,8 @@ class Position:
         base_quantity = sum(fill.base_quantity for fill in transaction.fills)
         signed_quantity = base_quantity if transaction.order.side == OrderSide.BUY else -base_quantity
 
-        self.size += signed_quantity
         if is_entry:
+            self.size += signed_quantity
             # For entry, calculate weighted average entry price
             total_quote = sum(fill.quote_quantity for fill in transaction.fills)
             if self.size != 0:

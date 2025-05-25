@@ -88,6 +88,11 @@ class Portfolio:
             raise ValueError(msg)
 
         agg_position_size = self.leverage_sizing(signal_event)
+        msg = (
+            f"Aggregated position size for signal {signal_event.signal} is {agg_position_size} "
+            f"with leverage {self.leverage} and account size {self.account_size}."
+        )
+        logger.info(msg)
         return [
             Order(
                 symbol=BinanceExchangeInfo.get_symbol_info(sh.symbol),
@@ -154,17 +159,25 @@ class Portfolio:
         """Calculate the size of the order based on the account size and leverage."""
         if signal_event.signal == StrategyDecision.LONG:
             buy_weight = [
-                signal_event.prices[sh.symbol] for sh in signal_event.hedge_ratio if sh.hedge_ratio > 0
+                signal_event.prices[sh.symbol] * sh.hedge_ratio
+                for sh in signal_event.hedge_ratio
+                if sh.hedge_ratio > 0
             ]
             sell_weight = [
-                signal_event.prices[sh.symbol] for sh in signal_event.hedge_ratio if sh.hedge_ratio < 0
+                signal_event.prices[sh.symbol] * sh.hedge_ratio
+                for sh in signal_event.hedge_ratio
+                if sh.hedge_ratio < 0
             ]
         if signal_event.signal == StrategyDecision.SHORT:
             buy_weight = [
-                signal_event.prices[sh.symbol] for sh in signal_event.hedge_ratio if sh.hedge_ratio < 0
+                signal_event.prices[sh.symbol] * sh.hedge_ratio
+                for sh in signal_event.hedge_ratio
+                if sh.hedge_ratio < 0
             ]
             sell_weight = [
-                signal_event.prices[sh.symbol] for sh in signal_event.hedge_ratio if sh.hedge_ratio > 0
+                signal_event.prices[sh.symbol] * sh.hedge_ratio
+                for sh in signal_event.hedge_ratio
+                if sh.hedge_ratio > 0
             ]
         # TODO: Leverage sizing could be even more sophisticated
         leveraged_size = self.account_size * self.leverage

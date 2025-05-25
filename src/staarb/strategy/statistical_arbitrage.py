@@ -3,6 +3,7 @@ from pandas import Series
 
 from staarb.core.bus.event_bus import EventBus
 from staarb.core.bus.events import MarketDataEvent, SignalEvent
+from staarb.core.enums import StrategyDecision
 from staarb.core.types import HedgeRatio, LookbackRequest
 from staarb.strategy.base import BaseStrategy
 from staarb.strategy.johansen_model import JohansenCointegrationModel
@@ -10,6 +11,8 @@ from staarb.strategy.signal_generator import BollingerBand
 
 
 class StatisticalArbitrage(BaseStrategy):
+    current_signal: StrategyDecision = StrategyDecision.HOLD
+
     def __init__(  # noqa: PLR0913
         self,
         interval: str,
@@ -87,6 +90,16 @@ class StatisticalArbitrage(BaseStrategy):
         # Generate the trading signal
         await self.generate_signal(market_data)
 
+    async def update_position(self, *_):
+        """
+        Update the position based on the closed transaction event.
+
+        Args:
+            signal_event: The signal event containing the trading signal and hedge ratio.
+
+        """
+        self.signal_generator.update_position(self.current_signal)
+
     async def generate_signal(self, market_data: dict[str, Series]):
         """
         Generate a trading signal based on the market data.
@@ -107,7 +120,7 @@ class StatisticalArbitrage(BaseStrategy):
         # Generate the trading signal
         signal = self.signal_generator.generate_signal(zscore)
         prices = {symbol: market_data[symbol].to_numpy()[-1][0] for symbol in market_data}
-
+        self.current_signal = signal
         await EventBus.publish(
             SignalEvent, SignalEvent(signal=signal, hedge_ratio=self.get_hedge_ratio(), prices=prices)
         )

@@ -24,8 +24,8 @@ class MockClient(AsyncClient):
         self.mock_data: dict[str, pd.Series] = {}  # Store mock data for backtesting
         self._current_pt = 0  # Pointer to the current data point
         self._len_data = 0
-        self._commission_rate = 0.02
-        self._slippage = 0.01
+        self._commission_rate = 0.001
+        self._slippage = 0.001
         self.time_stamps: list[datetime] = []
 
     @classmethod
@@ -94,7 +94,7 @@ class MockClient(AsyncClient):
             "transactTime": date_to_milliseconds(self.get_current_time()),
             "price": None,
             "origQty": quantity,
-            "executedQty": quantity * (1 - self._slippage),
+            "executedQty": quantity,
             "status": "FILLED",
             "fills": [
                 {

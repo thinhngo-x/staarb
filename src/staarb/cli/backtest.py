@@ -137,3 +137,4 @@ def setup_subscribers(strategy: StatisticalArbitrage, portfolio: Portfolio, exec
     EventBus.subscribe(SignalEvent, portfolio.publish_orders)
     EventBus.subscribe(OrderCreatedEvent, executor.execute_order)
     EventBus.subscribe(TransactionClosedEvent, portfolio.update_position)
+    EventBus.subscribe(TransactionClosedEvent, strategy.update_position)
