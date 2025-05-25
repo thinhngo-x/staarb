@@ -1,0 +1,92 @@
+[project]
+name = "staarb"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Duc Thinh Ngo", email = "duthngo@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.2.1",
+    "dotenv>=0.9.9",
+    "matplotlib>=3.10.3",
+    "numpy>=2.2.6",
+    "pandas>=2.2.3",
+    "pydotenv>=0.0.7",
+    "python-binance>=1.0.29",
+    "statsmodels>=0.14.4",
+]
+
+[project.scripts]
+staarb = "staarb.__main__:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "anyio>=4.9.0",
+    "mypy>=1.15.0",
+    "pytest-asyncio>=0.26.0",
+    "pytest>=8.3.5",
+    "ruff>=0.11.10",
+    "pytest-tornasync>=0.6.0.post2",
+    "ipykernel>=6.29.5",
+    "pandas-stubs>=2.2.3.250308",
+    "pre-commit>=4.2.0",
+]
+
+[tool.ruff]
+lint.select = ["ALL"]
+line-length = 110
+lint.ignore = [
+    #### modules
+    "ANN", # flake8-annotations
+    "COM", # flake8-commas
+    "C90", # mccabe complexity
+    "DJ",  # django
+    "EXE", # flake8-executable
+    "T10", # debugger
+    "TID", # flake8-tidy-imports
+
+    #### specific rules
+    "D100",   # ignore missing docs
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    "D200",
+    "D203",
+    "D205",
+    "D212",
+    "D400",
+    "D401",
+    "D415",
+    "E402",   # false positives for local imports
+    "TRY003", # external messages in exceptions are too verbose
+    "TD002",
+    "TD003",
+    "FIX002", # too verbose descriptions of todos
+]
+lint.fixable = [
+    "ALL"
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "SLF001", "PLR2004", "PT011", "NPY002", "INP001", "PD901"]
+"*.ipynb" = ["T201"]
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]
+
+[[tool.mypy.overrides]]
+module = "binance.*"
+ignore_missing_imports = true
+
