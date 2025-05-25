@@ -91,7 +91,7 @@ class Portfolio:
         return [
             Order(
                 symbol=BinanceExchangeInfo.get_symbol_info(sh.symbol),
-                quantity=agg_position_size * sh.hedge_ratio,
+                quantity=agg_position_size * abs(sh.hedge_ratio),
                 side=get_order_side(sh.hedge_ratio),
             )
             for sh in signal_event.hedge_ratio
@@ -169,6 +169,6 @@ class Portfolio:
         # TODO: Leverage sizing could be even more sophisticated
         leveraged_size = self.account_size * self.leverage
         return min(
-            leveraged_size / (sum(buy_weight) + EPS),
-            leveraged_size / (sum(sell_weight) + EPS),
+            leveraged_size / abs(sum(buy_weight) + EPS),
+            leveraged_size / abs(sum(sell_weight) + EPS),
         )

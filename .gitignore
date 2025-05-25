@@ -11,3 +11,6 @@ wheels/
 
 # Dev environments
 .env
+
+# Backtest results (generated data)
+backtest_results/

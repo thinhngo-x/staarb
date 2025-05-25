@@ -1,4 +1,5 @@
 import os
+import uuid
 from datetime import datetime
 
 import click
@@ -10,6 +11,7 @@ from staarb.core.bus.events import MarketDataEvent, OrderCreatedEvent, SignalEve
 from staarb.core.types import DataRequest
 from staarb.data.exchange_info_fetcher import BinanceExchangeInfo
 from staarb.data.ohlc_fetcher import MarketDataFetcher
+from staarb.persistence.backtest_storage import BacktestStorage
 from staarb.portfolio import Portfolio
 from staarb.strategy import StatisticalArbitrage
 from staarb.trader.order_executor import OrderExecutor
@@ -34,6 +36,8 @@ from staarb.utils import async_cmd, date_to_milliseconds
 )
 @click.option("--api-key", envvar="BINANCE_API_KEY", help="Binance API key.")
 @click.option("--api-secret", envvar="BINANCE_API_SECRET", help="Binance API secret key.")
+@click.option("--save/--no-save", default=True, help="Save backtest results for dashboard analysis.")
+@click.option("--storage-dir", default="backtest_results", help="Directory to save backtest results.")
 @async_cmd
 async def backtest(  # noqa: PLR0913
     symbols: list[str],
@@ -46,6 +50,9 @@ async def backtest(  # noqa: PLR0913
     env_file: str | None,
     api_key: str | None,
     api_secret: str | None,
+    *,
+    save: bool,
+    storage_dir: str,
 ):
     """Run a backtest for the given SYMBOLS between START_DATE and END_DATE."""
     click.echo(f"Running backtest for symbols: {', '.join(symbols)}")
@@ -94,6 +101,35 @@ async def backtest(  # noqa: PLR0913
 
     await client.close_connection()
     click.echo("Backtest completed successfully.")
+
+    # Save backtest results if requested
+    if save and portfolio:
+        try:
+            storage = BacktestStorage(storage_dir)
+            backtest_id = (
+                f"backtest_{'-'.join(symbols)}_{start_date.strftime('%Y%m%d')}_{uuid.uuid4().hex[:8]}"
+            )
+
+            metadata = {
+                "symbols": symbols,
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "interval": interval,
+                "train_val_split": train_val_split,
+                "entry_threshold": entry_threshold,
+                "exit_threshold": exit_threshold,
+            }
+
+            storage.save_backtest_result(backtest_id, portfolio, metadata)
+            click.echo(f"Backtest results saved with ID: {backtest_id}")
+            click.echo(f"Results saved to: {storage_dir}")
+            click.echo("Use 'staarb dashboard' to visualize the results.")
+        except (OSError, PermissionError, ValueError) as e:
+            click.echo(f"Warning: Failed to save backtest results: {e}")
+    elif save:
+        click.echo("Warning: Portfolio not available for saving.")
+    else:
+        click.echo("Backtest results not saved (use --save to enable saving).")
 
 
 def setup_subscribers(strategy: StatisticalArbitrage, portfolio: Portfolio, executor: OrderExecutor):

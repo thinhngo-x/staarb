@@ -1,5 +1,5 @@
 from staarb.core.bus.events import TransactionClosedEvent
-from staarb.core.enums import PositionDirection
+from staarb.core.enums import OrderSide, PositionDirection
 from staarb.core.types import Symbol, Transaction
 
 
@@ -34,11 +34,20 @@ class Position:
                 f"Transaction symbol {transaction.order.symbol} does not match position symbol {self.symbol}"
             )
             raise ValueError(msg)
-        self.size += sum(fill.base_quantity for fill in transaction.fills)
+
+        # Calculate the signed quantity based on order side
+        base_quantity = sum(fill.base_quantity for fill in transaction.fills)
+        signed_quantity = base_quantity if transaction.order.side == OrderSide.BUY else -base_quantity
+
+        self.size += signed_quantity
         if is_entry:
-            self.entry_price = sum(fill.quote_quantity for fill in transaction.fills) / self.size
+            # For entry, calculate weighted average entry price
+            total_quote = sum(fill.quote_quantity for fill in transaction.fills)
+            if self.size != 0:
+                self.entry_price = total_quote / abs(self.size)
         else:
-            exit_price = sum(fill.quote_quantity for fill in transaction.fills) / self.size
+            exit_quote = sum(fill.quote_quantity for fill in transaction.fills)
+            exit_price = exit_quote / abs(signed_quantity)
             self.close_position(exit_price)
 
     def close_position(self, exit_price: float):
@@ -56,5 +65,8 @@ class Position:
             return 0.0
 
         if self.exit_price > 0:
+            # For long positions (size > 0): PnL = (exit_price - entry_price) * size
+            # For short positions (size < 0): PnL = (entry_price - exit_price) * abs(size)
+            # This can be simplified to: (exit_price - entry_price) * size
             return (self.exit_price - self.entry_price) * self.size
-        return (self.entry_price - self.exit_price) * self.size
+        return 0.0
