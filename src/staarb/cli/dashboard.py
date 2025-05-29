@@ -433,11 +433,12 @@ def dashboard(*, host: str, port: int, storage_dir: str, debug: bool):
         if not results:
             click.echo("No backtest results found. Run some backtests first!")
             click.echo("Example: staarb backtest BTCUSDT ETHUSDT 2024-01-01 2024-02-01")
-            return
-        click.echo(f"Found {len(results)} backtest result(s)")
+        else:
+            click.echo(f"Found {len(results)} backtest result(s)")
     except (OSError, ValueError) as e:
         click.echo(f"Error accessing storage: {e}")
-        return
+        click.echo("Dashboard will launch but may show empty results.")
+        click.echo("You can try refreshing once storage is available.")
 
     dashboard_app = BacktestDashboard(storage)
     dashboard_app.run(host=host, port=port, debug=debug)

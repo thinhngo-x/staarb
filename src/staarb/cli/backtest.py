@@ -1,6 +1,7 @@
 import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 import click
 from dotenv import load_dotenv
@@ -30,8 +31,8 @@ from staarb.utils import async_cmd, date_to_milliseconds
 @click.option("--exit-threshold", default=0.0, type=float, help="Exit threshold for the strategy.")
 @click.option(
     "--env-file",
-    default="./.env",
-    type=click.Path(exists=True),
+    default=None,
+    type=click.Path(),
     help="Path to the environment file for configuration.",
 )
 @click.option("--api-key", envvar="BINANCE_API_KEY", help="Binance API key.")
@@ -39,7 +40,7 @@ from staarb.utils import async_cmd, date_to_milliseconds
 @click.option("--save/--no-save", default=True, help="Save backtest results for dashboard analysis.")
 @click.option("--storage-dir", default="backtest_results", help="Directory to save backtest results.")
 @async_cmd
-async def backtest(  # noqa: PLR0913
+async def backtest(  # noqa: PLR0913, PLR0915
     symbols: list[str],
     start_date: datetime,
     end_date: datetime,
@@ -56,7 +57,13 @@ async def backtest(  # noqa: PLR0913
 ):
     """Run a backtest for the given SYMBOLS between START_DATE and END_DATE."""
     click.echo(f"Running backtest for symbols: {', '.join(symbols)}")
-    load_dotenv(dotenv_path=env_file) if env_file else None
+
+    # Load environment file if provided and exists
+    if env_file and Path(env_file).exists():
+        load_dotenv(dotenv_path=env_file)
+    elif env_file:
+        click.echo(f"Warning: Environment file {env_file} not found. Continuing without it.")
+
     api_key = api_key or os.getenv("BINANCE_API_KEY")
     api_secret = api_secret or os.getenv("BINANCE_API_SECRET")
     if not api_key or not api_secret:
@@ -65,15 +72,16 @@ async def backtest(  # noqa: PLR0913
     click.echo(f"Start date: {start_date}, End date: {end_date}, Interval: {interval}")
     start_time = date_to_milliseconds(start_date)
     end_time = date_to_milliseconds(end_date)
-    client = await MockClient.create(
-        symbols,
-        DataRequest(interval, start_time, end_time),
-        balance={"USDC": 1000},
-        api_key=api_key,
-        api_secret=api_secret,
-    )
 
     try:
+        client = await MockClient.create(
+            symbols,
+            DataRequest(interval, start_time, end_time),
+            balance={"USDC": 1000},
+            api_key=api_key,
+            api_secret=api_secret,
+        )
+
         portfolio_name = f"Backtest {','.join(symbols)}"
         portfolio = Portfolio(name=portfolio_name, client=client, account_size=1000, leverage=3.8)
         await BinanceExchangeInfo.fetch_exchange_info(client=client)
@@ -99,7 +107,8 @@ async def backtest(  # noqa: PLR0913
         for market_data in client.get_mock_data(strategy.get_lookback_request()):
             await EventBus.publish(MarketDataEvent, data=MarketDataEvent(data=market_data))
     except Exception as e:
-        await client.close_connection()
+        if "client" in locals():
+            await client.close_connection()
         msg = f"An error occurred during backtest: {e}"
         raise click.ClickException(msg) from e
 
