@@ -18,14 +18,40 @@ logger = logging.getLogger(__name__)
 
 
 class Portfolio:
-    def __init__(self, name: str, client: AsyncClient, account_size: float, leverage: float = 3.8):
+    def __init__(
+        self,
+        name: str,
+        client: AsyncClient,
+        account_size: float | None = None,
+        leverage: float = 3.8,
+        quote: str = "USDC",
+    ):
         self.name = name
         self.client = client
         self.account_size = account_size
+        self._account_updated = asyncio.Event()
+        self.quote = quote
         self.leverage = leverage
         self.symbols: set[Symbol] = set()  # Set of symbols in the portfolio
         self.open_positions: dict[Symbol, Position] = {}  # Single open position per symbol
         self.closed_positions: dict[Symbol, list[Position]] = {}  # Closed positions
+
+    async def update_account_size(self, *_):
+        """Update the account size from the client."""
+        user_assets = (await self.client.get_margin_account())["userAssets"]
+        msg = f"User assets fetched: {user_assets}"
+        logger.info(msg)
+        for asset in user_assets:
+            if asset["asset"] == self.quote:
+                self.account_size = float(asset["free"])
+                break
+        msg = (
+            f"Account size updated to {self.account_size} {self.quote} "
+            f"with leverage {self.leverage} for portfolio {self.name}."
+        )
+        logger.info(msg)
+        self._account_updated.set()
+        return self.account_size
 
     def add_symbol(self, symbol: str | Symbol) -> set[Symbol]:
         """Add a symbol to the portfolio."""
@@ -62,7 +88,7 @@ class Portfolio:
         if signal_event.signal == StrategyDecision.EXIT:
             orders = self._prepare_exit_orders()
         elif signal_event.signal in (StrategyDecision.LONG, StrategyDecision.SHORT):
-            orders = self._prepare_entry_orders(signal_event)
+            orders = await self._prepare_entry_orders(signal_event)
         else:
             msg = f"Invalid signal {signal_event.signal} for portfolio preparation."
             raise ValueError(msg)
@@ -74,7 +100,7 @@ class Portfolio:
             msg = f"Orders are filtered due to: {e}"
             logger.warning(msg)
 
-    def _prepare_entry_orders(self, signal_event: SignalEvent) -> list[Order]:
+    async def _prepare_entry_orders(self, signal_event: SignalEvent) -> list[Order]:
         def get_order_side(hedge_ratio: float) -> OrderSide:
             if (hedge_ratio > 0 and signal_event.signal == StrategyDecision.LONG) or (
                 hedge_ratio < 0 and signal_event.signal == StrategyDecision.SHORT
@@ -87,7 +113,7 @@ class Portfolio:
             msg = f"Invalid hedge ratio {hedge_ratio} for signal {signal_event.signal}."
             raise ValueError(msg)
 
-        agg_position_size = self.leverage_sizing(signal_event)
+        agg_position_size = await self.leverage_sizing(signal_event)
         msg = (
             f"Aggregated position size for signal {signal_event.signal} is {agg_position_size} "
             f"with leverage {self.leverage} and account size {self.account_size}."
@@ -155,33 +181,25 @@ class Portfolio:
             raise BinanceOrderMinTotalException(msg)
         return new_order
 
-    def leverage_sizing(self, signal_event: SignalEvent) -> float:
+    async def leverage_sizing(self, signal_event: SignalEvent) -> float:
         """Calculate the size of the order based on the account size and leverage."""
-        if signal_event.signal == StrategyDecision.LONG:
-            buy_weight = [
-                signal_event.prices[sh.symbol] * sh.hedge_ratio
-                for sh in signal_event.hedge_ratio
-                if sh.hedge_ratio > 0
-            ]
-            sell_weight = [
-                signal_event.prices[sh.symbol] * sh.hedge_ratio
-                for sh in signal_event.hedge_ratio
-                if sh.hedge_ratio < 0
-            ]
-        if signal_event.signal == StrategyDecision.SHORT:
-            buy_weight = [
-                signal_event.prices[sh.symbol] * sh.hedge_ratio
-                for sh in signal_event.hedge_ratio
-                if sh.hedge_ratio < 0
-            ]
-            sell_weight = [
-                signal_event.prices[sh.symbol] * sh.hedge_ratio
-                for sh in signal_event.hedge_ratio
-                if sh.hedge_ratio > 0
-            ]
-        # TODO: Leverage sizing could be even more sophisticated
-        leveraged_size = self.account_size * self.leverage
-        return min(
-            leveraged_size / abs(sum(buy_weight) + EPS),
-            leveraged_size / abs(sum(sell_weight) + EPS),
+        pos_hedge_weight = sum(
+            signal_event.prices[sh.symbol] * sh.hedge_ratio
+            for sh in signal_event.hedge_ratio
+            if sh.hedge_ratio > 0
         )
+        neg_hedge_weight = sum(
+            -signal_event.prices[sh.symbol] * sh.hedge_ratio
+            for sh in signal_event.hedge_ratio
+            if sh.hedge_ratio < 0
+        )
+        # TODO: Leverage sizing could be even more sophisticated
+        await self._account_updated.wait()
+        if self.account_size is None:
+            msg = (
+                "Account size is not set. Please update the account size before calculating leverage sizing."
+            )
+            raise ValueError(msg)
+        leveraged_size = self.account_size * (self.leverage + 1)
+        self._account_updated.clear()
+        return leveraged_size / (pos_hedge_weight + neg_hedge_weight + EPS)

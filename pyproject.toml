@@ -42,7 +42,6 @@ dev = [
 
 [tool.ruff]
 lint.select = ["ALL"]
-line-length = 110
 lint.ignore = [
     #### modules
     "ANN", # flake8-annotations
@@ -78,6 +77,7 @@ lint.ignore = [
 lint.fixable = [
     "ALL"
 ]
+line-length = 110
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "SLF001", "PLR2004", "PT011", "NPY002", "INP001", "PD901"]

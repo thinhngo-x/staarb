@@ -66,7 +66,11 @@ async def backtest(  # noqa: PLR0913
     start_time = date_to_milliseconds(start_date)
     end_time = date_to_milliseconds(end_date)
     client = await MockClient.create(
-        symbols, DataRequest(interval, start_time, end_time), api_key=api_key, api_secret=api_secret
+        symbols,
+        DataRequest(interval, start_time, end_time),
+        balance={"USDC": 1000},
+        api_key=api_key,
+        api_secret=api_secret,
     )
 
     try:
@@ -134,6 +138,7 @@ async def backtest(  # noqa: PLR0913
 
 def setup_subscribers(strategy: StatisticalArbitrage, portfolio: Portfolio, executor: OrderExecutor):
     EventBus.subscribe(MarketDataEvent, strategy.on_market_data)
+    EventBus.subscribe(MarketDataEvent, portfolio.update_account_size)
     EventBus.subscribe(SignalEvent, portfolio.publish_orders)
     EventBus.subscribe(OrderCreatedEvent, executor.execute_order)
     EventBus.subscribe(TransactionClosedEvent, portfolio.update_position)

@@ -154,12 +154,12 @@ class BacktestDashboard:
                 [html.H3("Error", style={"color": "red"}), html.P(f"Failed to load backtest data: {e!s}")]
             )
 
-    def _create_summary_cards(self, summary: dict[str, Any], metadata: dict[str, Any]) -> html.Div:
+    def _create_summary_cards(self, summary: dict[str, Any], metadata: dict[str, Any]) -> html.Div:  # noqa: ARG002
         """Create summary cards showing key metrics."""
         total_pnl = summary.get("total_pnl", 0)
         total_trades = summary.get("total_trades", 0)
         win_rate = summary.get("win_rate", 0) * 100
-        account_size = metadata.get("account_size", 1000)
+        account_size = 1000
 
         return html.Div(
             [

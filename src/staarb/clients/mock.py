@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Literal
+import logging
+from typing import TYPE_CHECKING, Any, Literal
 
 from binance.async_client import AsyncClient
 
@@ -11,6 +12,9 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     import pandas as pd
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class MockClient(AsyncClient):
@@ -26,17 +30,56 @@ class MockClient(AsyncClient):
         self._len_data = 0
         self._commission_rate = 0.001
         self._slippage = 0.001
+        self._asset_balance: dict[str, Any] = {}
         self.time_stamps: list[datetime] = []
 
     @classmethod
     async def create(
-        cls, symbols: list[str], dreq: DataRequest | LookbackRequest, *args, **kwargs
+        cls,
+        symbols: list[str],
+        dreq: DataRequest | LookbackRequest,
+        balance: dict[str, float],
+        *args,
+        **kwargs,
     ) -> "MockClient":
         client = await super().create(*args, **kwargs)
         client.mock_data = await MarketDataFetcher.fetch_multiple_klines(client, symbols, dreq)
         client.time_stamps = next(iter(client.mock_data.values()), []).index
         client.set_len_data(len(next(iter(client.mock_data.values()), [])))
+        for asset, free in balance.items():
+            client.gain(asset, free)
         return client
+
+    def gain(self, asset: str, amount: float):
+        """
+        Set the mock asset balance for a specific asset.
+        This simulates the account balance for backtesting.
+        Auto repay borrowed amount if the asset is already borrowed.
+        """
+        msg = f"Adding {amount} {asset} to mock balance."
+        logger.info(msg)
+        if asset not in self._asset_balance:
+            self._asset_balance[asset] = {"free": 0.0, "locked": 0.0, "borrowed": 0.0, "interest": 0.0}
+        if self._asset_balance[asset]["borrowed"] > 0:
+            loan = self._asset_balance[asset]["borrowed"]
+            # If there is a borrowed amount, repay it first
+            self._asset_balance[asset]["borrowed"] = max(0.0, loan - amount)
+            amount = max(0, amount - loan)
+        self._asset_balance[asset]["free"] += amount
+
+    def pay(self, asset: str, amount: float):
+        """
+        Deduct the specified amount from the mock asset balance.
+        This simulates a payment or fee deduction in the mock environment.
+        Auto borrow when balance is insufficient.
+        """
+        msg = f"Paying {amount} {asset} from mock balance."
+        logger.info(msg)
+        if asset not in self._asset_balance:
+            self._asset_balance[asset] = {"free": 0.0, "locked": 0.0, "borrowed": 0.0, "interest": 0.0}
+        if self._asset_balance[asset]["free"] < amount:
+            self._asset_balance[asset]["borrowed"] += amount - self._asset_balance[asset]["free"]
+        self._asset_balance[asset]["free"] = max(0.0, self._asset_balance[asset]["free"] - amount)
 
     def set_len_data(self, length: int):
         self._len_data = length
@@ -70,6 +113,24 @@ class MockClient(AsyncClient):
         """
         return self.time_stamps[self._current_pt - 1]
 
+    async def get_margin_account(self, **_):
+        """
+        Mock method to simulate getting asset balance.
+        This does not make an actual API call but returns the mock asset balance.
+        """
+        user_assets = []
+        for ast, balance in self._asset_balance.items():
+            user_assets.append(
+                {
+                    "asset": ast,
+                    "free": str(balance["free"]),
+                    "locked": str(balance["locked"]),
+                    "borrowed": str(balance["borrowed"]),
+                    "interest": str(balance["interest"]),
+                }
+            )
+        return {"userAssets": user_assets}
+
     async def create_margin_order(self, symbol: str, quantity: float, side: Literal["BUY", "SELL"], **_):
         """
         Mock method to simulate creating a margin order.
@@ -86,6 +147,14 @@ class MockClient(AsyncClient):
         commission = (
             quantity * self._commission_rate if side == "BUY" else price * quantity * self._commission_rate
         )
+        if side == "BUY":
+            self.pay(symbol_info.quote_asset, price * quantity)
+            self.gain(symbol_info.base_asset, quantity)
+            self.pay(commission_asset, commission)
+        else:
+            self.pay(symbol_info.base_asset, quantity)
+            self.gain(symbol_info.quote_asset, price * quantity)
+            self.pay(commission_asset, commission)
         # Simulate a successful order creation response
         return {
             "symbol": symbol,
