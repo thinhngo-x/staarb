@@ -21,7 +21,7 @@ class TradingSession(TimestampedModel, table=True):
 
     session_id: str = Field(primary_key=True)
     session_type: SessionType = Field(default=SessionType.BACKTEST, index=True)
-    start_time: datetime = Field(default_factory=datetime.now, index=True)
+    start_time: datetime
     end_time: datetime | None = Field(default=None, index=True)
 
     positions: list["Position"] = Relationship(back_populates="session")
@@ -35,13 +35,13 @@ class Position(SQLModel, table=True):
     size: float = 0.0
     is_closed: bool = False
 
-    entry_price: float | None
+    entry_price: float
     entry_time: datetime
 
-    exit_price: float
-    exit_time: datetime | None
+    exit_price: float = Field(default=0.0)
+    exit_time: datetime | None = Field(default=None)
 
-    pnl: float
+    pnl: float = Field(default=0.0)
 
     session_id: str = Field(foreign_key="tradingsession.session_id", index=True)
     session: TradingSession = Relationship(back_populates="positions")
@@ -63,7 +63,14 @@ class Transaction(SQLModel, table=True):
 
 
 class Order(SQLModel, table=True):
-    """Model for an order within a position."""
+    """
+    Model for an order within a position.
+
+    Attributes:
+        side_effect (str): Default value is "AUTO_BORROW_REPAY".
+        time_in_force (str): Default value is "GTC".
+
+    """
 
     id: int = Field(primary_key=True)
     symbol: str = Field(index=True)

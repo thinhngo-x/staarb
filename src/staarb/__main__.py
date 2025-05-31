@@ -1,6 +1,6 @@
 import click
 
-from staarb.cli import backtest, dashboard
+from staarb.cli import backtest
 
 
 @click.group()
@@ -9,7 +9,6 @@ def cli():
 
 
 cli.add_command(backtest.backtest)
-cli.add_command(dashboard.dashboard)
 
 
 if __name__ == "__main__":

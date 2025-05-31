@@ -46,6 +46,7 @@ class Position:
         if not hasattr(self, "position_direction"):
             is_entry = True
             self.position_direction = transaction_closed_event.position_direction
+            self.entry_time = transaction.transact_time
         elif self.position_direction == transaction_closed_event.position_direction:
             is_entry = True  # Same direction, so it's an entry in a multi-entry position
         else:
@@ -71,15 +72,15 @@ class Position:
         else:
             exit_quote = sum(fill.quote_quantity for fill in transaction.fills)
             exit_price = exit_quote / abs(signed_quantity)
-            self.close_position(exit_price)
+            self.close_position(exit_price, transaction.transact_time)
 
-    def close_position(self, exit_price: float):
+    def close_position(self, exit_price: float, exit_time: datetime):
         """Close the position at the given exit price."""
         if self.size == 0:
             msg = "Cannot close a position with size 0."
             raise ValueError(msg)
         self.exit_price = exit_price
-        self.exit_time = datetime.now(tz=UTC)
+        self.exit_time = exit_time
         self.pnl = self.calculate_pnl()
         self.is_closed = True
 
