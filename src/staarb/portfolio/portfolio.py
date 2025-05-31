@@ -74,7 +74,7 @@ class Portfolio:
         if symbol not in self.open_positions:
             self.open_positions[symbol] = Position(symbol=symbol)
         self.open_positions[symbol].update_position(transaction_closed_event)
-
+        await self.open_positions[symbol].publish_position()
         # After update, if the position is closed, pop and move it to closed positions
         if self.open_positions[symbol].is_closed:
             position = self.open_positions.pop(symbol)

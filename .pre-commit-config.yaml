@@ -1,4 +1,9 @@
 repos:
+- repo: https://github.com/astral-sh/uv-pre-commit
+  # uv version.
+  rev: 0.7.9
+  hooks:
+    - id: uv-lock
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
   rev: v0.11.11
@@ -12,4 +17,14 @@ repos:
     rev: 'v1.15.0'  # Use the sha / tag you want to point at
     hooks:
     -   id: mypy
-        additional_dependencies: ['pandas-stubs']
+        additional_dependencies:
+        - "pandas-stubs"
+        - "pydantic"
+        - "sqlmodel"
+        - "click"
+        - "statsmodels"
+        - "pytest"
+        - "pytest-asyncio"
+        - "dotenv"
+        args:
+        - --config-file=pyproject.toml

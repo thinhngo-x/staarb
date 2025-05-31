@@ -17,6 +17,7 @@ dependencies = [
     "plotly>=5.17.0",
     "pydotenv>=0.0.7",
     "python-binance>=1.0.29",
+    "sqlmodel>=0.0.24",
     "statsmodels>=0.14.4",
 ]
 

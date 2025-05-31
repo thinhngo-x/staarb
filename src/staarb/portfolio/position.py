@@ -1,4 +1,8 @@
-from staarb.core.bus.events import TransactionClosedEvent
+import uuid
+from datetime import UTC, datetime
+
+from staarb.core.bus.event_bus import EventBus
+from staarb.core.bus.events import PositionEvent, TransactionClosedEvent
 from staarb.core.enums import OrderSide, PositionDirection
 from staarb.core.types import Symbol, Transaction
 
@@ -8,14 +12,33 @@ class Position:
 
     position_direction: PositionDirection
 
-    def __init__(self, symbol: Symbol, size: float = 0):
+    def __init__(self, symbol: Symbol, size: float = 0, position_id: str | None = None):
         self.symbol = symbol
         self.size = size
         self.entry_price = 0.0
+        self.entry_time = datetime.now(tz=UTC)
+        self.exit_time: datetime | None = None
         self.exit_price = 0.0
         self.pnl = 0.0
         self.is_closed = False
         self.transaction_history: list[Transaction] = []
+        self.position_id = position_id or self._generate_position_id()
+        self._save_transaction_count = 0
+
+    def _generate_position_id(self) -> str:
+        """Generate a unique position ID."""
+        return str(uuid.uuid4())
+
+    def mark_transactions_as_saved(self, count: int):
+        """Mark transactions as saved by incrementing the save transaction count."""
+        self._save_transaction_count += count
+
+    def get_unsaved_transactions(self) -> list[Transaction]:
+        """Get the list of transactions that have not been saved yet."""
+        return self.transaction_history[self._save_transaction_count :]
+
+    async def publish_position(self):
+        await EventBus.publish(PositionEvent, PositionEvent(position=self))
 
     def update_position(self, transaction_closed_event: TransactionClosedEvent):
         """Update the position with a new transaction."""
@@ -56,6 +79,7 @@ class Position:
             msg = "Cannot close a position with size 0."
             raise ValueError(msg)
         self.exit_price = exit_price
+        self.exit_time = datetime.now(tz=UTC)
         self.pnl = self.calculate_pnl()
         self.is_closed = True
 
@@ -70,3 +94,10 @@ class Position:
             # This can be simplified to: (exit_price - entry_price) * size
             return (self.exit_price - self.entry_price) * self.size
         return 0.0
+
+    def __repr__(self):
+        return (
+            f"Position(symbol={self.symbol}, size={self.size}, entry_price={self.entry_price}, "
+            f"entry_time={self.entry_time}, exit_time={self.exit_time}, exit_price={self.exit_price}, "
+            f"pnl={self.pnl}, is_closed={self.is_closed}, position_id={self.position_id})"
+        )

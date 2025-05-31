@@ -27,7 +27,6 @@ class TestBacktestCLI:
     def test_backtest_with_api_credentials(self, runner):
         """Test backtest with provided API credentials."""
         with (
-            tempfile.TemporaryDirectory() as temp_dir,
             patch.dict("os.environ", {"BINANCE_API_KEY": "test_key", "BINANCE_API_SECRET": "test_secret"}),
             patch("staarb.cli.backtest.MockClient.create", new_callable=AsyncMock) as mock_create,
             patch("staarb.cli.backtest.BinanceExchangeInfo.fetch_exchange_info", new_callable=AsyncMock),
@@ -57,8 +56,6 @@ class TestBacktestCLI:
                     "2024-01-01",
                     "2024-01-02",
                     "--no-save",
-                    "--storage-dir",
-                    temp_dir,
                 ],
             )
 
@@ -69,7 +66,6 @@ class TestBacktestCLI:
     def test_backtest_with_custom_parameters(self, runner):
         """Test backtest with custom parameters."""
         with (
-            tempfile.TemporaryDirectory() as temp_dir,
             patch.dict("os.environ", {"BINANCE_API_KEY": "test_key", "BINANCE_API_SECRET": "test_secret"}),
             patch("staarb.cli.backtest.MockClient.create", new_callable=AsyncMock) as mock_create,
             patch("staarb.cli.backtest.BinanceExchangeInfo.fetch_exchange_info", new_callable=AsyncMock),
@@ -106,8 +102,6 @@ class TestBacktestCLI:
                     "--exit-threshold",
                     "0.5",
                     "--no-save",
-                    "--storage-dir",
-                    temp_dir,
                 ],
             )
 
@@ -118,7 +112,6 @@ class TestBacktestCLI:
     def test_backtest_with_save_enabled(self, runner):
         """Test backtest with saving enabled."""
         with (
-            tempfile.TemporaryDirectory() as temp_dir,
             patch.dict("os.environ", {"BINANCE_API_KEY": "test_key", "BINANCE_API_SECRET": "test_secret"}),
             patch("staarb.cli.backtest.MockClient.create", new_callable=AsyncMock) as mock_create,
             patch("staarb.cli.backtest.BinanceExchangeInfo.fetch_exchange_info", new_callable=AsyncMock),
@@ -126,7 +119,7 @@ class TestBacktestCLI:
             patch("staarb.cli.backtest.Portfolio") as mock_portfolio_class,
             patch("staarb.cli.backtest.StatisticalArbitrage") as mock_strategy_class,
             patch("staarb.cli.backtest.OrderExecutor"),
-            patch("staarb.cli.backtest.BacktestStorage") as mock_storage_class,
+            patch("staarb.cli.backtest.TradingStorage") as mock_storage_class,
         ):
             # Setup mocks
             mock_client = MagicMock()
@@ -142,7 +135,7 @@ class TestBacktestCLI:
             mock_strategy_class.return_value = mock_strategy
 
             mock_storage = MagicMock()
-            mock_storage.save_backtest_result.return_value = "test_backtest_001"
+            mock_storage.save_session = AsyncMock()
             mock_storage_class.return_value = mock_storage
 
             result = runner.invoke(
@@ -152,15 +145,14 @@ class TestBacktestCLI:
                     "2024-01-01",
                     "2024-01-02",
                     "--save",
-                    "--storage-dir",
-                    temp_dir,
+                    "--storage-url",
+                    "sqlite:///test.db",
                 ],
             )
 
             assert result.exit_code == 0
-            assert "Backtest results saved with ID:" in result.output
-            assert "Use 'staarb dashboard' to visualize" in result.output
-            mock_storage.save_backtest_result.assert_called_once()
+            assert "Backtest completed successfully" in result.output
+            mock_storage.save_session.assert_called_once()
 
     def test_backtest_exception_handling(self, runner):
         """Test backtest exception handling."""
@@ -179,7 +171,6 @@ class TestBacktestCLI:
     def test_backtest_save_error_handling(self, runner):
         """Test backtest save error handling."""
         with (
-            tempfile.TemporaryDirectory() as temp_dir,
             patch.dict("os.environ", {"BINANCE_API_KEY": "test_key", "BINANCE_API_SECRET": "test_secret"}),
             patch("staarb.cli.backtest.MockClient.create", new_callable=AsyncMock) as mock_create,
             patch("staarb.cli.backtest.BinanceExchangeInfo.fetch_exchange_info", new_callable=AsyncMock),
@@ -187,7 +178,7 @@ class TestBacktestCLI:
             patch("staarb.cli.backtest.Portfolio") as mock_portfolio_class,
             patch("staarb.cli.backtest.StatisticalArbitrage") as mock_strategy_class,
             patch("staarb.cli.backtest.OrderExecutor"),
-            patch("staarb.cli.backtest.BacktestStorage") as mock_storage_class,
+            patch("staarb.cli.backtest.TradingStorage") as mock_storage_class,
         ):
             # Setup mocks
             mock_client = MagicMock()
@@ -203,7 +194,7 @@ class TestBacktestCLI:
             mock_strategy_class.return_value = mock_strategy
 
             mock_storage = MagicMock()
-            mock_storage.save_backtest_result.side_effect = OSError("Permission denied")
+            mock_storage.save_session = AsyncMock(side_effect=OSError("Connection failed"))
             mock_storage_class.return_value = mock_storage
 
             result = runner.invoke(
@@ -213,13 +204,13 @@ class TestBacktestCLI:
                     "2024-01-01",
                     "2024-01-02",
                     "--save",
-                    "--storage-dir",
-                    temp_dir,
+                    "--storage-url",
+                    "sqlite:///test.db",
                 ],
             )
 
-            assert result.exit_code == 0
-            assert "Warning: Failed to save backtest results:" in result.output
+            assert result.exit_code == 1
+            assert "An error occurred during backtest:" in result.output
 
     def test_backtest_env_file_loading(self, runner):
         """Test backtest with env file loading."""

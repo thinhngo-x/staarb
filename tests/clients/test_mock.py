@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 import pytest
+import pytest_asyncio
 
 from staarb.clients.mock import MockClient
 from staarb.core.types import DataRequest, LookbackRequest
@@ -67,7 +68,7 @@ class TestMockClient:
             yield client
             asyncio.run(client.close_connection())
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def mock_client_async(self, sample_data_request, sample_balance):
         """Create a MockClient instance for async testing."""
         symbols = ["BTCUSDT", "ETHUSDT"]
@@ -189,17 +190,15 @@ class TestMockClient:
     @pytest.mark.asyncio
     async def test_get_margin_account(self, mock_client_async):
         """Test getting margin account information."""
-        async for client in mock_client_async:
-            account_info = await client.get_margin_account()
+        account_info = await mock_client_async.get_margin_account()
 
-            assert "userAssets" in account_info
-            user_assets = account_info["userAssets"]
+        assert "userAssets" in account_info
+        user_assets = account_info["userAssets"]
 
-            # Should have USDC and BTC from initial balance
-            asset_names = [asset["asset"] for asset in user_assets]
-            assert "USDC" in asset_names
-            assert "BTC" in asset_names
-            break
+        # Should have USDC and BTC from initial balance
+        asset_names = [asset["asset"] for asset in user_assets]
+        assert "USDC" in asset_names
+        assert "BTC" in asset_names
 
     @pytest.mark.asyncio
     async def test_create_margin_order_buy(self, mock_client_async):
@@ -209,16 +208,14 @@ class TestMockClient:
             mock_symbol_obj = type("Symbol", (), {"base_asset": "BTC", "quote_asset": "USDT"})()
             mock_symbol.return_value = mock_symbol_obj
 
-            async for client in mock_client_async:
-                client.set_current_pointer(1)
+            mock_client_async.set_current_pointer(1)
 
-                result = await client.create_margin_order(symbol="BTCUSDT", quantity=0.1, side="BUY")
+            result = await mock_client_async.create_margin_order(symbol="BTCUSDT", quantity=0.1, side="BUY")
 
-                assert result["symbol"] == "BTCUSDT"
-                assert result["status"] == "FILLED"
-                assert result["executedQty"] == 0.1
-                assert len(result["fills"]) == 1
-                break
+            assert result["symbol"] == "BTCUSDT"
+            assert result["status"] == "FILLED"
+            assert result["executedQty"] == 0.1
+            assert len(result["fills"]) == 1
 
     @pytest.mark.asyncio
     async def test_create_margin_order_sell(self, mock_client_async):
@@ -228,20 +225,16 @@ class TestMockClient:
             mock_symbol_obj = type("Symbol", (), {"base_asset": "BTC", "quote_asset": "USDT"})()
             mock_symbol.return_value = mock_symbol_obj
 
-            async for client in mock_client_async:
-                client.set_current_pointer(1)
+            mock_client_async.set_current_pointer(1)
 
-                result = await client.create_margin_order(symbol="BTCUSDT", quantity=0.05, side="SELL")
+            result = await mock_client_async.create_margin_order(symbol="BTCUSDT", quantity=0.05, side="SELL")
 
-                assert result["symbol"] == "BTCUSDT"
-                assert result["status"] == "FILLED"
-                assert result["executedQty"] == 0.05
-                break
+            assert result["symbol"] == "BTCUSDT"
+            assert result["status"] == "FILLED"
+            assert result["executedQty"] == 0.05
 
     @pytest.mark.asyncio
     async def test_create_margin_order_unknown_symbol(self, mock_client_async):
         """Test creating order for unknown symbol raises error."""
-        async for client in mock_client_async:
-            with pytest.raises(ValueError, match="Symbol .* not found in mock data"):
-                await client.create_margin_order(symbol="UNKNOWN", quantity=0.1, side="BUY")
-            break
+        with pytest.raises(ValueError, match="Symbol .* not found in mock data"):
+            await mock_client_async.create_margin_order(symbol="UNKNOWN", quantity=0.1, side="BUY")

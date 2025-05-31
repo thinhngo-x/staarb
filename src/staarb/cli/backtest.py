@@ -1,5 +1,4 @@
 import os
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -8,11 +7,19 @@ from dotenv import load_dotenv
 
 from staarb.clients import MockClient
 from staarb.core.bus.event_bus import EventBus
-from staarb.core.bus.events import MarketDataEvent, OrderCreatedEvent, SignalEvent, TransactionClosedEvent
+from staarb.core.bus.events import (
+    MarketDataEvent,
+    OrderCreatedEvent,
+    PositionEvent,
+    SessionEvent,
+    SignalEvent,
+    TransactionClosedEvent,
+)
+from staarb.core.enums import SessionType
 from staarb.core.types import DataRequest
 from staarb.data.exchange_info_fetcher import BinanceExchangeInfo
 from staarb.data.ohlc_fetcher import MarketDataFetcher
-from staarb.persistence.backtest_storage import BacktestStorage
+from staarb.persistence.storage import TradingStorage
 from staarb.portfolio import Portfolio
 from staarb.strategy import StatisticalArbitrage
 from staarb.trader.order_executor import OrderExecutor
@@ -38,9 +45,11 @@ from staarb.utils import async_cmd, date_to_milliseconds
 @click.option("--api-key", envvar="BINANCE_API_KEY", help="Binance API key.")
 @click.option("--api-secret", envvar="BINANCE_API_SECRET", help="Binance API secret key.")
 @click.option("--save/--no-save", default=True, help="Save backtest results for dashboard analysis.")
-@click.option("--storage-dir", default="backtest_results", help="Directory to save backtest results.")
+@click.option(
+    "--storage-url", default="sqlite:///trading_data.db", help="URL for the storage backend (optional)."
+)
 @async_cmd
-async def backtest(  # noqa: PLR0913, PLR0915
+async def backtest(  # noqa: PLR0913
     symbols: list[str],
     start_date: datetime,
     end_date: datetime,
@@ -53,7 +62,7 @@ async def backtest(  # noqa: PLR0913, PLR0915
     api_secret: str | None,
     *,
     save: bool,
-    storage_dir: str,
+    storage_url: str,
 ):
     """Run a backtest for the given SYMBOLS between START_DATE and END_DATE."""
     click.echo(f"Running backtest for symbols: {', '.join(symbols)}")
@@ -74,6 +83,7 @@ async def backtest(  # noqa: PLR0913, PLR0915
     end_time = date_to_milliseconds(end_date)
 
     try:
+        ######## Create a mock client for backtesting ########
         client = await MockClient.create(
             symbols,
             DataRequest(interval, start_time, end_time),
@@ -96,9 +106,22 @@ async def backtest(  # noqa: PLR0913, PLR0915
             interval, entry_threshold=entry_threshold, exit_threshold=exit_threshold
         )
         strategy.fit(train_data)
+        ######## End of mock client creation ########
 
+        ######## Start the backtest session ########
+        if save:
+            storage = TradingStorage(storage_url)
+            await storage.save_session(
+                SessionEvent(
+                    session_type=SessionType.BACKTEST,
+                    start_time=start_date,
+                    end_time=end_date,
+                )
+            )
+        else:
+            storage = None
         order_executor = OrderExecutor(client=client)
-        setup_subscribers(strategy, portfolio, order_executor)
+        setup_subscribers(strategy, portfolio, order_executor, storage)
 
         click.echo("Starting backtest...")
         cur_pt = int(len(train_data[symbols[0]]) * train_val_split)
@@ -106,6 +129,7 @@ async def backtest(  # noqa: PLR0913, PLR0915
 
         for market_data in client.get_mock_data(strategy.get_lookback_request()):
             await EventBus.publish(MarketDataEvent, data=MarketDataEvent(data=market_data))
+        ######## End of backtest session ########
     except Exception as e:
         if "client" in locals():
             await client.close_connection()
@@ -115,40 +139,17 @@ async def backtest(  # noqa: PLR0913, PLR0915
     await client.close_connection()
     click.echo("Backtest completed successfully.")
 
-    # Save backtest results if requested
-    if save and portfolio:
-        try:
-            storage = BacktestStorage(storage_dir)
-            backtest_id = (
-                f"backtest_{'-'.join(symbols)}_{start_date.strftime('%Y%m%d')}_{uuid.uuid4().hex[:8]}"
-            )
 
-            metadata = {
-                "symbols": symbols,
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "interval": interval,
-                "train_val_split": train_val_split,
-                "entry_threshold": entry_threshold,
-                "exit_threshold": exit_threshold,
-            }
-
-            storage.save_backtest_result(backtest_id, portfolio, metadata)
-            click.echo(f"Backtest results saved with ID: {backtest_id}")
-            click.echo(f"Results saved to: {storage_dir}")
-            click.echo("Use 'staarb dashboard' to visualize the results.")
-        except (OSError, PermissionError, ValueError) as e:
-            click.echo(f"Warning: Failed to save backtest results: {e}")
-    elif save:
-        click.echo("Warning: Portfolio not available for saving.")
-    else:
-        click.echo("Backtest results not saved (use --save to enable saving).")
-
-
-def setup_subscribers(strategy: StatisticalArbitrage, portfolio: Portfolio, executor: OrderExecutor):
+def setup_subscribers(
+    strategy: StatisticalArbitrage,
+    portfolio: Portfolio,
+    executor: OrderExecutor,
+    storage: TradingStorage | None = None,
+):
     EventBus.subscribe(MarketDataEvent, strategy.on_market_data)
     EventBus.subscribe(MarketDataEvent, portfolio.update_account_size)
     EventBus.subscribe(SignalEvent, portfolio.publish_orders)
     EventBus.subscribe(OrderCreatedEvent, executor.execute_order)
     EventBus.subscribe(TransactionClosedEvent, portfolio.update_position)
     EventBus.subscribe(TransactionClosedEvent, strategy.update_position)
+    EventBus.subscribe(PositionEvent, storage.save_position) if storage else None

@@ -1,7 +1,7 @@
 import logging
 from asyncio import create_task, gather
 from collections.abc import Callable
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from staarb.core.bus.events import BaseEvent
@@ -31,7 +31,7 @@ class EventBus:
         cls._handlers[event_type].append(handler)
 
     @classmethod
-    async def publish(cls, event_type: type["BaseEvent"], data=None) -> None:
+    async def publish(cls, event_type: Any, data=None) -> None:
         """
         Publish an event to all registered handlers for that event type.
         """

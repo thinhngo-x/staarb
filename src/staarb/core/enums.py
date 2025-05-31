@@ -1,7 +1,15 @@
 from enum import Enum
 
 
-class PositionDirection(Enum):
+class SessionType(str, Enum):
+    """Enum for session types."""
+
+    BACKTEST = "backtest"
+    LIVE = "live"
+    PAPER = "paper"
+
+
+class PositionDirection(str, Enum):
     """
     Enum for position directions.
     """
@@ -10,7 +18,7 @@ class PositionDirection(Enum):
     SHORT = "SHORT"
 
 
-class OrderSide(Enum):
+class OrderSide(str, Enum):
     """
     Enum for order sides.
     """
@@ -18,11 +26,8 @@ class OrderSide(Enum):
     BUY = "BUY"
     SELL = "SELL"
 
-    def __str__(self):
-        return self.value
 
-
-class StrategyDecision(Enum):
+class StrategyDecision(str, Enum):
     """
     Enum for trade signals.
     """
@@ -33,7 +38,7 @@ class StrategyDecision(Enum):
     EXIT = "EXIT"
 
 
-class PositionStatus(Enum):
+class PositionStatus(str, Enum):
     """
     Enum for position states.
     """

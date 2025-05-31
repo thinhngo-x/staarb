@@ -17,3 +17,7 @@ backtest_results/
 
 # Coverage reports
 .coverage
+
+# SQLite database files
+test.sql
+trading_data.db

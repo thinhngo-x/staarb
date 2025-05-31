@@ -7,6 +7,7 @@ from staarb.core.bus.event_bus import EventBus
 from staarb.core.bus.events import OrderCreatedEvent, TransactionClosedEvent
 from staarb.core.enums import OrderSide, PositionDirection
 from staarb.core.types import Fill, Order, Transaction
+from staarb.utils import miliseconds_to_date
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class OrderExecutor:
         tasks = [
             self.client.create_margin_order(
                 symbol=order.symbol.name,
-                side=str(order.side),
+                side=order.side,
                 type=order.type,
                 quantity=order.quantity,
                 price=order.price,
@@ -80,4 +81,6 @@ class OrderExecutor:
             )
             for fill in response["fills"]
         ]
-        return Transaction(order=order, fills=fills, transact_time=response["transactTime"])
+        return Transaction(
+            order=order, fills=fills, transact_time=miliseconds_to_date(response["transactTime"])
+        )

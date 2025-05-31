@@ -1,4 +1,6 @@
+import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from staarb.core.enums import OrderSide
 
@@ -178,7 +180,8 @@ class Order:
 class Transaction:
     order: Order
     fills: list[Fill]
-    transact_time: int
+    transact_time: datetime
+    id: str | None = None
 
     def __post_init__(self):
         if not self.fills:
@@ -190,6 +193,8 @@ class Transaction:
         if self.order.symbol != self.fills[0].symbol:
             msg = f"Order symbol {self.order.symbol} does not match fill symbol {self.fills[0].symbol.name}"
             raise ValueError(msg)
+        if self.id is None:
+            self.id = str(uuid.uuid4())
 
     def avg_fill_price(self):
         """
