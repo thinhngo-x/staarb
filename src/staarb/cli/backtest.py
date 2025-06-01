@@ -17,7 +17,7 @@ from staarb.core.types import DataRequest
 from staarb.data.exchange_info_fetcher import BinanceExchangeInfo
 from staarb.data.ohlc_fetcher import MarketDataFetcher
 from staarb.persistence.storage import TradingStorage
-from staarb.portfolio import Portfolio
+from staarb.portfolio.portfolio import Portfolio
 from staarb.strategy import StatisticalArbitrage
 from staarb.trader.order_executor import OrderExecutor
 from staarb.utils import async_cmd, date_to_milliseconds
@@ -92,7 +92,7 @@ async def backtest(  # noqa: PLR0913
         )
 
         portfolio_name = f"Backtest {','.join(symbols)}"
-        portfolio = Portfolio(name=portfolio_name, client=client, account_size=1000, leverage=3.8)
+        portfolio = Portfolio(name=portfolio_name, client=client)
         await BinanceExchangeInfo.fetch_exchange_info(client=client)
         [portfolio.add_symbol(symbol) for symbol in symbols]
         train_window = DataRequest(

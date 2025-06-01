@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 
 from binance.async_client import AsyncClient
 from binance.exceptions import BinanceOrderMinAmountException, BinanceOrderMinTotalException
@@ -17,21 +18,28 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class PortfolioConfig:
+    account_size: float | None = None
+    leverage: float = 3.8
+    quote: str = "USDC"
+
+
 class Portfolio:
     def __init__(
         self,
         name: str,
         client: AsyncClient,
-        account_size: float | None = None,
-        leverage: float = 3.8,
-        quote: str = "USDC",
+        config: PortfolioConfig | None = None,
     ):
+        if config is None:
+            config = PortfolioConfig()
         self.name = name
         self.client = client
-        self.account_size = account_size
+        self.account_size = config.account_size
         self._account_updated = asyncio.Event()
-        self.quote = quote
-        self.leverage = leverage
+        self.quote = config.quote
+        self.leverage = config.leverage
         self.symbols: set[Symbol] = set()  # Set of symbols in the portfolio
         self.open_positions: dict[Symbol, Position] = {}  # Single open position per symbol
         self.closed_positions: dict[Symbol, list[Position]] = {}  # Closed positions
@@ -100,33 +108,46 @@ class Portfolio:
             msg = f"Orders are filtered due to: {e}"
             logger.warning(msg)
 
-    async def _prepare_entry_orders(self, signal_event: SignalEvent) -> list[Order]:
-        def get_order_side(hedge_ratio: float) -> OrderSide:
-            if (hedge_ratio > 0 and signal_event.signal == StrategyDecision.LONG) or (
-                hedge_ratio < 0 and signal_event.signal == StrategyDecision.SHORT
-            ):
-                return OrderSide.BUY
-            if (hedge_ratio < 0 and signal_event.signal == StrategyDecision.LONG) or (
-                hedge_ratio > 0 and signal_event.signal == StrategyDecision.SHORT
-            ):
-                return OrderSide.SELL
-            msg = f"Invalid hedge ratio {hedge_ratio} for signal {signal_event.signal}."
+    @staticmethod
+    def get_order_side(hedge_ratio: float, signal: StrategyDecision) -> OrderSide:
+        # Simple lookup table approach: (hedge_ratio sign, signal) -> OrderSide
+        # hedge_ratio > 0: 1, hedge_ratio < 0: -1
+        # This reduces the conditions and branches
+        hedge_sign = 1 if hedge_ratio > 0 else -1
+
+        order_side_map = {
+            (1, StrategyDecision.LONG): OrderSide.BUY,
+            (1, StrategyDecision.SHORT): OrderSide.SELL,
+            (-1, StrategyDecision.LONG): OrderSide.SELL,
+            (-1, StrategyDecision.SHORT): OrderSide.BUY,
+        }
+
+        if hedge_ratio == 0 or (key := (hedge_sign, signal)) not in order_side_map:
+            msg = f"Invalid hedge ratio {hedge_ratio} for signal {signal}."
             raise ValueError(msg)
 
+        return order_side_map[key]
+
+    async def _prepare_entry_orders(self, signal_event: SignalEvent) -> list[Order]:
         agg_position_size = await self.leverage_sizing(signal_event)
         msg = (
             f"Aggregated position size for signal {signal_event.signal} is {agg_position_size} "
             f"with leverage {self.leverage} and account size {self.account_size}."
         )
         logger.info(msg)
-        return [
-            Order(
-                symbol=BinanceExchangeInfo.get_symbol_info(sh.symbol),
-                quantity=agg_position_size * abs(sh.hedge_ratio),
-                side=get_order_side(sh.hedge_ratio),
+        orders = []
+        for sh in signal_event.hedge_ratio:
+            symbol_info = BinanceExchangeInfo.get_symbol_info(sh.symbol)
+            quantity = agg_position_size * abs(sh.hedge_ratio)
+            side = self.get_order_side(sh.hedge_ratio, signal_event.signal)
+            orders.append(
+                Order(
+                    symbol=symbol_info,
+                    quantity=quantity,
+                    side=side,
+                )
             )
-            for sh in signal_event.hedge_ratio
-        ]
+        return orders
 
     # TODO: Handle transactions, initiate positions, etc.
 
