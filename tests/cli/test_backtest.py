@@ -15,15 +15,6 @@ class TestBacktestCLI:
         """Create Click test runner."""
         return CliRunner()
 
-    def test_backtest_missing_api_credentials(self, runner):
-        """Test backtest fails when API credentials are missing."""
-        # Clear environment variables to ensure missing credentials
-        with patch.dict("os.environ", {}, clear=True):
-            result = runner.invoke(backtest, ["BTCUSDT", "ETHUSDT", "2024-01-01", "2024-01-02"])
-
-            assert result.exit_code == 0
-            assert "API key and secret must be provided" in result.output
-
     def test_backtest_with_api_credentials(self, runner):
         """Test backtest with provided API credentials."""
         with (

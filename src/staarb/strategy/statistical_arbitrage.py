@@ -55,7 +55,7 @@ class StatisticalArbitrage(BaseStrategy):
             The hedge ratio.
 
         """
-        return self.signal_model.get_hedge_ratio()
+        return self.signal_model.hedge_ratio
 
     def fit(self, market_data: dict[str, Series]):
         """
@@ -113,7 +113,9 @@ class StatisticalArbitrage(BaseStrategy):
         """
         # Convert market data to a 2D array
         data = np.concat([market_data[symbol].to_numpy().T for symbol in market_data], axis=0)
-
+        if data.shape[0] != len(market_data.keys()):
+            msg = "Market data does not match the number of assets in the model."
+            raise ValueError(msg)
         # Calculate the z-score
         zscore = self.signal_model.estimate(data)
 

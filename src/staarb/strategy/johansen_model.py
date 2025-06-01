@@ -28,7 +28,8 @@ class JohansenCointegrationModel:
     def get_lookback_window(self):
         return self._half_life_window
 
-    def get_hedge_ratio(self):
+    @property
+    def hedge_ratio(self):
         if self._hedge_ratio is None:
             msg = "Hedge ratio is not fitted yet."
             raise ValueError(msg)
