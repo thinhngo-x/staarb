@@ -109,17 +109,24 @@ class Portfolio:
             logger.warning(msg)
 
     @staticmethod
-    def get_order_side(hedge_ratio: float, signal) -> OrderSide:
-        if (hedge_ratio > 0 and signal == StrategyDecision.LONG) or (
-            hedge_ratio < 0 and signal == StrategyDecision.SHORT
-        ):
-            return OrderSide.BUY
-        if (hedge_ratio < 0 and signal == StrategyDecision.LONG) or (
-            hedge_ratio > 0 and signal == StrategyDecision.SHORT
-        ):
-            return OrderSide.SELL
-        msg = f"Invalid hedge ratio {hedge_ratio} for signal {signal}."
-        raise ValueError(msg)
+    def get_order_side(hedge_ratio: float, signal: StrategyDecision) -> OrderSide:
+        # Simple lookup table approach: (hedge_ratio sign, signal) -> OrderSide
+        # hedge_ratio > 0: 1, hedge_ratio < 0: -1
+        # This reduces the conditions and branches
+        hedge_sign = 1 if hedge_ratio > 0 else -1
+
+        order_side_map = {
+            (1, StrategyDecision.LONG): OrderSide.BUY,
+            (1, StrategyDecision.SHORT): OrderSide.SELL,
+            (-1, StrategyDecision.LONG): OrderSide.SELL,
+            (-1, StrategyDecision.SHORT): OrderSide.BUY,
+        }
+
+        if hedge_ratio == 0 or (key := (hedge_sign, signal)) not in order_side_map:
+            msg = f"Invalid hedge ratio {hedge_ratio} for signal {signal}."
+            raise ValueError(msg)
+
+        return order_side_map[key]
 
     async def _prepare_entry_orders(self, signal_event: SignalEvent) -> list[Order]:
         agg_position_size = await self.leverage_sizing(signal_event)
