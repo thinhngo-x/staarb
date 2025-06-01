@@ -9,12 +9,9 @@ from staarb.clients import MockClient
 from staarb.core.bus.event_bus import EventBus
 from staarb.core.bus.events import (
     MarketDataEvent,
-    OrderCreatedEvent,
-    PositionEvent,
     SessionEvent,
-    SignalEvent,
-    TransactionClosedEvent,
 )
+from staarb.core.bus.subscribers import setup_backtest_subscribers
 from staarb.core.enums import SessionType
 from staarb.core.types import DataRequest
 from staarb.data.exchange_info_fetcher import BinanceExchangeInfo
@@ -73,6 +70,8 @@ async def backtest(  # noqa: PLR0913
     elif env_file:
         click.echo(f"Warning: Environment file {env_file} not found. Continuing without it.")
 
+    load_dotenv()  # Load default .env if exists
+
     api_key = api_key or os.getenv("BINANCE_API_KEY")
     api_secret = api_secret or os.getenv("BINANCE_API_SECRET")
     if not api_key or not api_secret:
@@ -121,7 +120,7 @@ async def backtest(  # noqa: PLR0913
         else:
             storage = None
         order_executor = OrderExecutor(client=client)
-        setup_subscribers(strategy, portfolio, order_executor, storage)
+        setup_backtest_subscribers(strategy, portfolio, order_executor, storage)
 
         click.echo("Starting backtest...")
         cur_pt = int(len(train_data[symbols[0]]) * train_val_split)
@@ -138,18 +137,3 @@ async def backtest(  # noqa: PLR0913
 
     await client.close_connection()
     click.echo("Backtest completed successfully.")
-
-
-def setup_subscribers(
-    strategy: StatisticalArbitrage,
-    portfolio: Portfolio,
-    executor: OrderExecutor,
-    storage: TradingStorage | None = None,
-):
-    EventBus.subscribe(MarketDataEvent, strategy.on_market_data)
-    EventBus.subscribe(MarketDataEvent, portfolio.update_account_size)
-    EventBus.subscribe(SignalEvent, portfolio.publish_orders)
-    EventBus.subscribe(OrderCreatedEvent, executor.execute_order)
-    EventBus.subscribe(TransactionClosedEvent, portfolio.update_position)
-    EventBus.subscribe(TransactionClosedEvent, strategy.update_position)
-    EventBus.subscribe(PositionEvent, storage.save_position) if storage else None
